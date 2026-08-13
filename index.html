@@ -14,6 +14,11 @@
     var ua = navigator.userAgent || '';
     var APP_STORE = 'https://apps.apple.com/kr/app/id6782400445';
     var PLAY_STORE = 'https://play.google.com/store/apps/details?id=com.plife.plife_app';
+    // 인앱 브라우저(인스타/페북/스레드/카카오/네이버/라인)에서는 자동 이동을 하지 않는다.
+    // apps.apple.com 은 모바일 UA 에 itms-appss:// 로 301 하고, 이 스킴은 사용자 탭 없이
+    // 스크립트로 이동하면 인앱 WebView 가 차단해 빈 화면이 된다 → 아래 스토어 버튼을 탭하게 한다.
+    var inApp = /Instagram|Threads|FBAN|FBAV|FB_IAB|KAKAOTALK|NAVER\(inapp|Line\/|DaumApps/i.test(ua);
+    if (inApp) { document.documentElement.className += ' inapp'; return; }
     if (/iPhone|iPad|iPod/i.test(ua)) { location.replace(APP_STORE); }
     else if (/Android/i.test(ua)) { location.replace(PLAY_STORE); }
   })();
@@ -46,6 +51,10 @@
   .badge .s { font-size: 10px; opacity: .75; display: block; }
   .badge .b { font-size: 16px; font-weight: 700; }
   .foot { margin-top: 44px; font-size: 12px; color: #B5B5B0; }
+  /* 인앱 브라우저에서만 노출되는 안내 (script 에서 html.inapp 부여) */
+  .tip { display: none; margin-top: 20px; font-size: 12.5px; color: #999; line-height: 1.65; }
+  .tip b { color: #3D7A5E; font-weight: 700; }
+  html.inapp .tip { display: block; }
 </style>
 </head>
 <body>
@@ -67,6 +76,7 @@
         <span class="t"><span class="s">GET IT ON</span><span class="b">Google Play</span></span>
       </a>
     </div>
+    <p class="tip">스토어가 열리지 않으면<br>오른쪽 위 <b>⋯</b> → <b>외부 브라우저에서 열기</b>를 눌러주세요.</p>
     <div class="foot">© plife · 식물과 함께한 매일을 기록해요<br><a href="/delete-account/">계정 삭제 요청</a></div>
   </main>
 </body>
