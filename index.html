@@ -9,41 +9,66 @@
 <meta property="og:description" content="물주기 알림부터 성장 다이어리까지. 식물과 함께한 매일을 기록해요.">
 <meta property="og:type" content="website">
 <script>
-  // 기기 감지 → 스토어 자동 이동. 데스크톱/기타는 아래 랜딩 노출.
+  // 기기 감지 → 스토어 이동. 인앱 브라우저는 앱별로 갈린다(아래 참고).
+  //
+  // 인앱 브라우저 공통 문제: apps.apple.com 은 모바일 UA 에 itms-appss:// 로 301 하는데,
+  // 인앱 WebView 는 이 스킴을 다른 앱으로 넘기지 못한다. 자동 이동이든 사용자 버튼 탭이든
+  // 똑같이 막힌다(탭은 제스처지만 리다이렉트로 스킴에 도달하는 순간 끊긴다).
+  //   · 카카오톡·라인 → 외부 브라우저로 나가는 공식 경로가 있다. 그걸 쓰면 완전히 해결된다.
+  //   · 인스타·스레드·페북 → 경로가 없다. Apple 개발자 포럼도 결론이 '근본 해결책 없음'이고
+  //     탈출 스킴 x-safari-https / instagram://extbrowser 는 메타가 막았다. 2026-08 실기기 확인:
+  //     인앱에서는 무반응, 사용자가 ⋯ → 외부 브라우저로 나가면 정상 동작 → 그 안내를 노출한다.
   (function () {
     var ua = navigator.userAgent || '';
     var APP_STORE = 'https://apps.apple.com/kr/app/id6782400445';
     var PLAY_STORE = 'https://play.google.com/store/apps/details?id=com.plife.plife_app';
-    // 인앱 브라우저(인스타/페북/스레드/카카오/네이버/라인)에서는 iOS 에서 App Store 를
-    // 열 방법이 없다. apps.apple.com 이 모바일 UA 에 itms-appss:// 로 301 하는데, 인앱 WebView
-    // 는 이 스킴을 다른 앱으로 넘기지 못한다 — 자동 이동이든 사용자 버튼 탭이든 똑같이 막힌다
-    // (탭은 제스처지만 리다이렉트로 스킴에 도달하는 순간 끊긴다). 탈출 스킴
-    // x-safari-https:// 와 instagram://extbrowser 도 인스타가 차단했다. 2026-08 실기기 확인:
-    // 인앱에서는 무반응, '외부 브라우저에서 열기'로 Safari 로 나가면 정상 동작.
-    // → 확실한 그 경로를 1급 안내로 올리고, 스킴이 통하는 기기를 위해 버튼 시도는 남긴다.
-    var inApp = /Instagram|Threads|FBAN|FBAV|FB_IAB|KAKAOTALK|NAVER\(inapp|Line\/|DaumApps/i.test(ua);
-    if (inApp) {
-      var isIOS = /iPhone|iPad|iPod/i.test(ua);
-      document.documentElement.className += isIOS ? ' inapp inapp-ios' : ' inapp';
-      if (isIOS) {
-        document.addEventListener('DOMContentLoaded', function () {
-          var a = document.getElementById('ios-cta');
-          if (!a) { return; }
-          a.addEventListener('click', function (e) {
-            e.preventDefault();
-            // 1) 리다이렉트를 거치지 않는 스킴 직접 시도
-            location.href = 'itms-appss://apps.apple.com/kr/app/id6782400445';
-            // 2) 스킴이 막혀 화면이 그대로면 표준 HTTPS 링크로 재시도(Apple 권장 형식)
-            setTimeout(function () {
-              if (document.visibilityState === 'visible') { location.href = APP_STORE; }
-            }, 700);
-          });
-        });
-      }
+    var isIOS = /iPhone|iPad|iPod/i.test(ua);
+    var isAndroid = /Android/i.test(ua);
+    var here = location.origin + location.pathname;
+
+    var isKakao = /KAKAOTALK/i.test(ua);
+    var isLine = /Line\//i.test(ua);
+    var isMeta = /Instagram|Threads|FBAN|FBAV|FB_IAB/i.test(ua);
+    var isEtcInApp = /NAVER\(inapp|DaumApps/i.test(ua);
+    var inApp = isKakao || isLine || isMeta || isEtcInApp;
+
+    // 일반 브라우저: 그대로 스토어로 보낸다.
+    if (!inApp) {
+      if (isIOS) { location.replace(APP_STORE); }
+      else if (isAndroid) { location.replace(PLAY_STORE); }
       return;
     }
-    if (/iPhone|iPad|iPod/i.test(ua)) { location.replace(APP_STORE); }
-    else if (/Android/i.test(ua)) { location.replace(PLAY_STORE); }
+
+    // 탈출 경로가 공개된 앱은 즉시 외부 브라우저로 넘긴다.
+    // 카카오톡은 공식 스킴, 라인은 공식 파라미터(같은 URL 재진입 루프를 막으려 플래그를 확인).
+    if (isKakao) {
+      location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(here);
+    } else if (isLine && location.search.indexOf('openExternalBrowser') === -1) {
+      location.href = here + '?openExternalBrowser=1';
+    }
+
+    // 위 시도가 막히거나(메타 계열은 애초에 경로가 없다) 실패하면 이 페이지에 머문다 → 안내 노출.
+    document.documentElement.className += isIOS ? ' inapp inapp-ios' : ' inapp';
+    if (!isIOS) { return; }
+
+    // iOS 인앱: 확실한 방법이 없으니 버튼 탭에 단계적 시도만 걸어둔다. x-safari-https 는
+    // 메타가 막았다고 보고되지만 기기·버전에 따라 통하는 경우가 있고, 실패해도 지금과 같은
+    // 무반응이라 잃을 것이 없다. 셋 다 막히면 위 안내가 유일한 경로다.
+    document.addEventListener('DOMContentLoaded', function () {
+      var a = document.getElementById('ios-cta');
+      if (!a) { return; }
+      a.addEventListener('click', function (e) {
+        e.preventDefault();
+        var visible = function () { return document.visibilityState === 'visible'; };
+        location.href = 'x-safari-https://' + here.replace(/^https?:\/\//, '');
+        setTimeout(function () {
+          if (visible()) { location.href = 'itms-appss://apps.apple.com/kr/app/id6782400445'; }
+        }, 600);
+        setTimeout(function () {
+          if (visible()) { location.href = APP_STORE; }
+        }, 1300);
+      });
+    });
   })();
 </script>
 <style>
